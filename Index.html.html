@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, touch-action=manipulation">
+  <title>SecureGram – الجرام الكامل</title>
+  <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d1117; font-family: 'Segoe UI', Tahoma, sans-serif;
+      height: 100vh; width: 100vw; display: flex; justify-content: center; align-items: center;
+      color: #c9d1d9;
+    }
+    #app {
+      width: 100%; height: 100%; max-width: 500px; background: #161b22;
+      box-shadow: 0 0 40px #1f6feb; overflow: hidden; display: flex; flex-direction: column;
+      position: relative;
+    }
+    .screen { display: none; flex-direction: column; height: 100%; }
+    .screen.active { display: flex; }
+
+    /* المصادقة */
+    .auth-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 30px; }
+    .auth-box { width: 100%; max-width: 320px; background: #1c2128; padding: 30px; border-radius: 20px; border: 1px solid #30363d; }
+    .auth-box h2 { text-align: center; color: #58a6ff; margin-bottom: 20px; }
+    .auth-box label { font-size: 0.9em; color: #8b949e; display: block; margin-bottom: 5px; }
+    .auth-box input { width: 100%; padding: 12px; margin-bottom: 15px; background: #0d1117; border: 1px solid #30363d; border-radius: 10px; color: white; }
+    .auth-box button { width: 100%; padding: 12px; background: #238636; border: none; color: white; border-radius: 10px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+    .auth-box .link { color: #58a6ff; text-align: center; cursor: pointer; display: block; margin-top: 10px; }
+    .error { color: #f85149; margin-bottom: 10px; text-align: center; }
+
+    /* الشريط العلوي */
+    .top-bar { display: flex; align-items: center; padding: 10px 15px; border-bottom: 1px solid #30363d; justify-content: space-between; }
+    .top-bar h3 { color: #58a6ff; }
+    .top-bar img { width: 35px; height: 35px; border-radius: 50%; border: 2px solid #58a6ff; }
+    .top-bar .back-btn { background: none; border: none; color: #58a6ff; font-size: 1.5em; cursor: pointer; }
+
+    /* المحتوى الرئيسي */
+    .content { flex: 1; overflow-y: auto; padding: 10px; }
+
+    /* الشريط السفلي */
+    .bottom-nav { display: flex; justify-content: space-around; padding: 10px 0; background: #0d1117; border-top: 1px solid #30363d; }
+    .nav-item { color: #8b949e; text-align: center; cursor: pointer; font-size: 0.8em; }
+    .nav-item.active { color: #58a6ff; }
+    .nav-item span { display: block; font-size: 1.8em; }
+
+    /* قصص */
+    .stories-container { display: flex; gap: 10px; padding: 10px 0; overflow-x: auto; border-bottom: 1px solid #30363d; margin-bottom: 10px; }
+    .story { width: 70px; height: 70px; border-radius: 50%; background: linear-gradient(45deg, #f09433, #dc2743); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; position: relative; }
+    .story img { width: 62px; height: 62px; border-radius: 50%; border: 3px solid #0d1117; }
+    .story .username { position: absolute; bottom: -18px; font-size: 0.7em; color: white; }
+
+    /* منشور */
+    .post { background: #21262d; border-radius: 15px; margin-bottom: 20px; overflow: hidden; }
+    .post-header { display: flex; align-items: center; padding: 10px; gap: 10px; cursor: pointer; }
+    .post-header img { width: 35px; height: 35px; border-radius: 50%; }
+    .post-header .username { font-weight: bold; color: #58a6ff; }
+    .post-media img, .post-media video { width: 100%; max-height: 400px; object-fit: cover; }
+    .post-actions { display: flex; gap: 15px; padding: 10px; font-size: 1.5em; }
+    .post-actions span { cursor: pointer; }
+    .post-likes { padding: 0 10px; font-size: 0.9em; color: #8b949e; }
+    .post-caption { padding: 0 10px 10px; }
+    .post-comments { padding: 0 10px 10px; }
+    .comment { display: flex; gap: 5px; margin-bottom: 5px; font-size: 0.9em; }
+    .comment strong { color: #58a6ff; }
+    .add-comment { display: flex; gap: 5px; margin-top: 5px; }
+    .add-comment input { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 15px; padding: 5px 10px; color: white; }
+    .add-comment button { background: #1f6feb; border: none; color: white; border-radius: 15px; padding: 5px 15px; cursor: pointer; }
+
+    /* ريلز */
+    .reel { margin-bottom: 20px; border-radius: 15px; overflow: hidden; background: #000; position: relative; }
+    .reel video { width: 100%; max-height: 500px; object-fit: cover; }
+    .reel-info { position: absolute; bottom: 10px; right: 10px; color: white; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 10px; }
+
+    /* دردشة */
+    .chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; }
+    .msg { max-width: 75%; margin-bottom: 10px; padding: 10px 15px; border-radius: 20px; word-wrap: break-word; }
+    .msg.sent { background: #1f6feb; color: white; align-self: flex-end; }
+    .msg.received { background: #21262d; align-self: flex-start; }
+    .msg img, .msg video { max-width: 200px; border-radius: 10px; margin-top: 5px; }
+
+    /* بحث */
+    .search-box input { width: 100%; padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 10px; color: white; margin: 10px 0; }
+    .search-result { padding: 10px; background: #21262d; border-radius: 10px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+    .search-result button { margin-right: auto; background: #238636; border: none; color: white; padding: 8px 15px; border-radius: 8px; cursor: pointer; }
+
+    /* بروفايل */
+    .profile-header { display: flex; flex-direction: column; align-items: center; padding: 20px; }
+    .profile-header img { width: 90px; height: 90px; border-radius: 50%; border: 3px solid #58a6ff; }
+    .profile-stats { display: flex; gap: 30px; margin: 15px 0; }
+    .stat { text-align: center; cursor: pointer; }
+    .stat strong { display: block; font-size: 1.3em; }
+    .follow-btn { background: #1f6feb; color: white; border: none; padding: 8px 25px; border-radius: 20px; cursor: pointer; }
+    .follow-btn.following { background: #da3633; }
+
+    /* قوائم المتابَعة */
+    .user-list { padding: 10px; }
+    .user-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: #21262d; border-radius: 10px; margin-bottom: 8px; }
+    .user-item img { width: 40px; height: 40px; border-radius: 50%; }
+    .user-item .info { flex: 1; }
+    .user-item button { padding: 5px 15px; border-radius: 15px; border: none; cursor: pointer; }
+
+    /* محادثات متعددة */
+    .chat-list-item { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid #30363d; cursor: pointer; }
+    .chat-list-item img { width: 45px; height: 45px; border-radius: 50%; }
+    .chat-list-item:hover { background: #21262d; }
+
+    /* إنشاء منشور */
+    .create-post { padding: 15px; background: #0d1117; border-top: 1px solid #30363d; }
+    .create-post input, .create-post textarea { width: 100%; padding: 10px; background: #161b22; border: 1px solid #30363d; border-radius: 10px; color: white; margin-bottom: 10px; }
+    .create-post button { padding: 10px 20px; background: #1f6feb; border: none; color: white; border-radius: 10px; cursor: pointer; }
+
+    /* قصة جديدة */
+    .story-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 50; }
+    .story-modal video, .story-modal img { max-width: 90%; max-height: 80%; border-radius: 15px; }
+    .story-modal .close { position: absolute; top: 20px; right: 20px; color: white; font-size: 2em; cursor: pointer; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <!-- شاشة المصادقة -->
+  <div id="authScreen" class="screen active">
+    <div class="auth-container">
+      <div class="auth-box">
+        <h2>📸 SecureGram</h2>
+        <div id="loginForm">
+          <label>اسم المستخدم</label>
+          <input type="text" id="loginUsername" placeholder="أدخل اسم المستخدم">
+          <label>كلمة المرور</label>
+          <input type="password" id="loginPassword" placeholder="أدخل كلمة المرور">
+          <div class="error" id="loginError"></div>
+          <button id="loginBtn">تسجيل الدخول</button>
+          <button id="adminLoginBtn" style="background:#6e40c9;">👑 دخول أدمن</button>
+          <span class="link" id="showRegister">ليس لديك حساب؟ سجل الآن</span>
+        </div>
+        <div id="registerForm" style="display:none;">
+          <label>اسم المستخدم</label>
+          <input type="text" id="regUsername" placeholder="اختر اسم المستخدم">
+          <label>كلمة المرور</label>
+          <input type="password" id="regPassword" placeholder="اختر كلمة مرور قوية">
+          <div class="error" id="regError"></div>
+          <button id="registerBtn">تسجيل</button>
+          <span class="link" id="showLogin">لديك حساب؟ سجل الدخول</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- الشاشة الرئيسية -->
+  <div id="mainScreen" class="screen">
+    <!-- أعلى -->
+    <div class="top-bar" id="topBar">
+      <button class="back-btn hidden" id="backBtn">←</button>
+      <h3>SecureGram</h3>
+      <img id="topAvatar" src="" alt="بروفايل">
+    </div>
+    <div class="content" id="mainContent"></div>
+    <div class="bottom-nav" id="bottomNav">
+      <div class="nav-item active" data-tab="home"><span>🏠</span>الرئيسية</div>
+      <div class="nav-item" data-tab="search"><span>🔍</span>بحث</div>
+      <div class="nav-item" data-tab="reels"><span>🎥</span>ريلز</div>
+      <div class="nav-item" data-tab="chats"><span>💬</span>محادثات</div>
+      <div class="nav-item" data-tab="profile"><span>👤</span>حسابي</div>
+    </div>
+    <div class="create-post hidden" id="createPostArea">
+      <input type="file" id="postMediaInput" accept="image/*,video/*">
+      <input type="text" id="postCaptionInput" placeholder="تعليق...">
+      <label><input type="checkbox" id="postIsReel"> ريلز</label>
+      <button id="publishPostBtn">نشر</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    // ==================== قاعدة البيانات ====================
+    const db = new Dexie('SecureGramPro');
+    db.version(1).stores({
+      accounts: 'uuid, username',
+      sessions: 'key',
+      posts: 'id, authorUuid, timestamp',
+      comments: 'id, postId, timestamp',
+      likes: 'id, postId, userId', // userId هو من أعجب
+      follows: 'id, followerUuid, followingUuid', // follower يتابع following
+      stories: 'id, authorUuid, expiresAt',
+      chats: 'id',
+      messages: '++id, chatId, timestamp'
+    });
+
+    let currentUser = null;
+    let currentTab = 'home';
+    let peerConnections = {}; // متعدد الاتصالات: مفتاح peerId -> conn
+    let activeChatPeerId = null; // المحادثة النشطة حالياً
+    let viewingProfileUuid = null; // للبروفايل العام
+    let storyViewer = null; // عنصر قصة نشط
+
+    // ==================== التشفير والمصادقة (كما سبق) ====================
+    async function generateAESKey() { return crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]); }
+    async function exportKey(key) { const raw = await crypto.subtle.exportKey("raw", key); return Array.from(new Uint8Array(raw)); }
+    async function importKey(raw) { return crypto.subtle.importKey("raw", new Uint8Array(raw), { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]); }
+    async function encryptData(key, text) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const enc = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(text));
+      return { iv: Array.from(iv), data: Array.from(new Uint8Array(enc)) };
+    }
+    async function decryptData(key, obj) {
+      const iv = new Uint8Array(obj.iv); const data = new Uint8Array(obj.data);
+      const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+      return new TextDecoder().decode(dec);
+    }
+    async function hashPassword(pw) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    async function initAdmin() {
+      if (!(await db.accounts.get('admin-yaman-gadhat-001'))) {
+        const passHash = await hashPassword('Yaman@2008');
+        await db.accounts.put({ uuid: 'admin-yaman-gadhat-001', username: 'YamanGadhat', passwordHash: passHash, profilePic: '', bio: 'الحساب الإداري' });
+      }
+    }
+    async function saveSession(uuid) { await db.sessions.put({ key: 'currentUser', uuid }); }
+    async function loadSession() { const s = await db.sessions.get('currentUser'); return s ? s.uuid : null; }
+    async function clearSession() { await db.sessions.delete('currentUser'); }
+
+    // ==================== واجهة عامة ====================
+    const mainContent = document.getElementById('mainContent');
+    const topBar = document.getElementById('topBar');
+    const backBtn = document.getElementById('backBtn');
+    const topAvatar = document.getElementById('topAvatar');
+    const bottomNav = document.getElementById('bottomNav');
+    const createPostArea = document.getElementById('createPostArea');
+
+    function showBackButton(show = true) { backBtn.classList.toggle('hidden', !show); }
+    backBtn.onclick = () => {
+      if (viewingProfileUuid) { viewingProfileUuid = null; renderTab(currentTab); showBackButton(false); }
+      else if (activeChatPeerId) { activeChatPeerId = null; renderTab('chats'); }
+    };
+
+    function switchTab(tab) {
+      currentTab = tab;
+      viewingProfileUuid = null;
+      activeChatPeerId = null;
+      showBackButton(false);
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+      renderTab(tab);
+    }
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => switchTab(item.dataset.tab));
+    });
+
+    async function renderTab(tab) {
+      createPostArea.classList.add('hidden');
+      mainContent.innerHTML = '';
+      switch(tab) {
+        case 'home': await renderHome(); createPostArea.classList.remove('hidden'); break;
+        case 'search': renderSearch(); break;
+        case 'reels': await renderReels(); createPostArea.classList.remove('hidden'); break;
+        case 'chats': await renderChatList(); break;
+        case 'profile': await renderProfile(currentUser.uuid); break;
+      }
+      // تحديث الصورة العلوية
+      topAvatar.src = currentUser?.profilePic || '';
+    }
+
+    // ---------- الصفحة الرئيسية (قصص + منشورات) ----------
+    async function renderHome() {
+      // القصص
+      const storiesDiv = document.createElement('div'); storiesDiv.className = 'stories-container';
+      const stories = await db.stories.where('expiresAt').above(Date.now()).toArray();
+      // قصتك
+      const myStoryBtn = document.createElement('div'); myStoryBtn.className = 'story';
+      myStoryBtn.innerHTML = `<img src="${currentUser.profilePic || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2262%22 height=%2262%22><rect width=%2262%22 height=%2262%22 fill=%22%23333%22/><text x=%2222%22 y=%2242%22 fill=%22white%22>+</text></svg>'}" alt=""><span class="username">قصتك</span>`;
+      myStoryBtn.onclick = createStory;
+      storiesDiv.appendChild(myStoryBtn);
+      // قصص المتابَعين (كلهم هنا محلياً، يمكن عرض قصص من تتابعهم)
+      const followingList = await db.follows.where('followerUuid').equals(currentUser.uuid).toArray();
+      const followedUuids = followingList.map(f => f.followingUuid);
+      const allUsers = await db.accounts.toArray();
+      for (let u of allUsers.filter(u => followedUuids.includes(u.uuid))) {
+        const userStories = stories.filter(s => s.authorUuid === u.uuid);
+        if (userStories.length > 0) {
+          const sDiv = document.createElement('div'); sDiv.className = 'story';
+          sDiv.innerHTML = `<img src="${u.profilePic || ''}" alt=""><span class="username">${u.username}</span>`;
+          sDiv.onclick = () => viewStory(userStories[0]); // أول قصة
+          storiesDiv.appendChild(sDiv);
+        }
+      }
+      mainContent.appendChild(storiesDiv);
+
+      // المنشورات (الخاصة بك ومن تتابعهم فقط لمحاكاة التايم لاين)
+      const allPosts = await db.posts.orderBy('timestamp').reverse().toArray();
+      const timelinePosts = allPosts.filter(p => p.authorUuid === currentUser.uuid || followedUuids.includes(p.authorUuid));
+      for (let post of timelinePosts) {
+        const postEl = await createPostElement(post);
+        mainContent.appendChild(postEl);
+      }
+      if (timelinePosts.length === 0) mainContent.innerHTML += '<p style="text-align:center;color:#8b949e;">لا توجد منشورات. تابع مستخدمين لرؤية منشوراتهم.</p>';
+    }
+
+    // إنشاء عنصر منشور (مع تعليقات وإعجابات)
+    async function createPostElement(post) {
+      const div = document.createElement('div'); div.className = 'post';
+      const author = await db.accounts.get(post.authorUuid) || { username: 'مستخدم', profilePic: '' };
+      const likes = await db.likes.where('postId').equals(post.id).toArray();
+      const likedByMe = likes.some(l => l.userId === currentUser.uuid);
+      const comments = await db.comments.where('postId').equals(post.id).toArray();
+
+      let html = `
+        <div class="post-header" data-uuid="${author.uuid}">
+          <img src="${author.profilePic || ''}" alt="">
+          <span class="username">${author.username}</span>
+        </div>
+        <div class="post-media">${post.mediaType === 'image' ? `<img src="${post.mediaUrl}">` : `<video src="${post.mediaUrl}" controls></video>`}</div>
+        <div class="post-actions">
+          <span class="like-btn" data-postid="${post.id}">${likedByMe ? '❤️' : '🤍'}</span>
+          <span>💬</span>
+        </div>
+        <div class="post-likes">${likes.length} إعجاب</div>
+        <div class="post-caption"><strong>${author.username}</strong> ${post.caption || ''}</div>
+        <div class="post-comments">
+          ${comments.map(c => `<div class="comment"><strong>${c.authorUsername}</strong> ${c.text}</div>`).join('')}
+          <div class="add-comment">
+            <input type="text" placeholder="أضف تعليق..." data-postid="${post.id}">
+            <button data-postid="${post.id}">نشر</button>
+          </div>
+        </div>
+      `;
+      div.innerHTML = html;
+
+      // أحداث
+      div.querySelector('.post-header').onclick = () => viewProfile(author.uuid);
+      div.querySelector('.like-btn').onclick = async () => {
+        const postId = post.id;
+        const existing = await db.likes.where({postId, userId: currentUser.uuid}).first();
+        if (existing) {
+          await db.likes.delete(existing.id);
+        } else {
+          await db.likes.put({id: crypto.randomUUID(), postId, userId: currentUser.uuid, timestamp: Date.now()});
+        }
+        // إعادة عرض المنشور (لتحديث القلب)
+        renderTab('home');
+      };
+      div.querySelectorAll('.add-comment button').forEach(btn => {
+        btn.onclick = async () => {
+          const input = btn.parentElement.querySelector('input');
+          const text = input.value.trim();
+          if (!text) return;
+          const postId = btn.dataset.postid;
+          await db.comments.put({
+            id: crypto.randomUUID(), postId, authorUuid: currentUser.uuid, authorUsername: currentUser.username,
+            text, timestamp: Date.now()
+          });
+          renderTab('home');
+        };
+      });
+
+      return div;
+    }
+
+    // ---------- القصص ----------
+    async function createStory() {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,video/*';
+      inp.onchange = async (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const dataUrl = reader.result;
+          const mediaType = file.type.startsWith('image') ? 'image' : 'video';
+          await db.stories.put({
+            id: crypto.randomUUID(),
+            authorUuid: currentUser.uuid,
+            mediaUrl: dataUrl,
+            mediaType,
+            expiresAt: Date.now() + 24*60*60*1000 // 24 ساعة
+          });
+          renderTab('home');
+        };
+        reader.readAsDataURL(file);
+      };
+      inp.click();
+    }
+
+    function viewStory(story) {
+      const modal = document.createElement('div'); modal.className = 'story-modal';
+      modal.innerHTML = `
+        <span class="close">✕</span>
+        ${story.mediaType === 'image' ? `<img src="${story.mediaUrl}">` : `<video src="${story.mediaUrl}" controls autoplay></video>`}
+      `;
+      document.body.appendChild(modal);
+      modal.querySelector('.close').onclick = () => modal.remove();
+      setTimeout(() => modal.remove(), 5000); // إخفاء تلقائي بعد 5 ثوان
+    }
+
+    // ---------- الريلز ----------
+    async function renderReels() {
+      const allPosts = await db.posts.toArray();
+      const reels = allPosts.filter(p => p.mediaType === 'video' && p.isReel).sort((a,b) => b.timestamp - a.timestamp);
+      reels.forEach(r => {
+        const div = document.createElement('div'); div.className = 'reel';
+        div.innerHTML = `
+          <video src="${r.mediaUrl}" controls autoplay loop></video>
+          <div class="reel-info"><strong>${r.authorUsername || ''}</strong> ${r.caption||''}</div>
+        `;
+        mainContent.appendChild(div);
+      });
+      if (reels.length === 0) mainContent.innerHTML += '<p style="text-align:center;color:#8b949e;">لا توجد ريلز</p>';
+    }
+
+    // ---------- البحث ----------
+    function renderSearch() {
+      mainContent.innerHTML = `<div class="search-box"><input type="text" id="searchInput" placeholder="ابحث عن مستخدم..."></div><div id="searchResults"></div>`;
+      document.getElementById('searchInput').oninput = async (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        const res = document.getElementById('searchResults'); res.innerHTML = '';
+        if (!q) return;
+        const users = (await db.accounts.toArray()).filter(u => u.uuid !== currentUser.uuid && u.username.toLowerCase().includes(q));
+        users.forEach(u => {
+          const d = document.createElement('div'); d.className = 'search-result';
+          d.innerHTML = `<img src="${u.profilePic || ''}" width="40" height="40" style="border-radius:50%;"><span>${u.username}</span><button>عرض</button>`;
+          d.querySelector('button').onclick = () => viewProfile(u.uuid);
+          res.appendChild(d);
+        });
+      };
+    }
+
+    // ---------- المتابعة ----------
+    async function followUser(targetUuid) {
+      if (targetUuid === currentUser.uuid) return;
+      const exists = await db.follows.where({followerUuid: currentUser.uuid, followingUuid: targetUuid}).first();
+      if (exists) await db.follows.delete(exists.id);
+      else await db.follows.put({id: crypto.randomUUID(), followerUuid: currentUser.uuid, followingUuid: targetUuid, timestamp: Date.now()});
+      // تحديث واجهة البروفايل إن كانت معروضة
+      if (viewingProfileUuid === targetUuid) await renderProfile(targetUuid);
+    }
+
+    async function isFollowing(targetUuid) {
+      return !!(await db.follows.where({followerUuid: currentUser.uuid, followingUuid: targetUuid}).first());
+    }
+
+    // ---------- بروفايل (عام / خاص) ----------
+    async function viewProfile(uuid) {
+      viewingProfileUuid = uuid;
+      showBackButton(true);
+      await renderProfile(uuid);
+    }
+
+    async function renderProfile(uuid) {
+      const user = await db.accounts.get(uuid);
+      if (!user) return;
+      const postsCount = await db.posts.where('authorUuid').equals(uuid).count();
+      const followersCount = (await db.follows.where('followingUuid').equals(uuid).toArray()).length;
+      const followingCount = (await db.follows.where('followerUuid').equals(uuid).toArray()).length;
+      const isOwn = uuid === currentUser.uuid;
+      const following = await isFollowing(uuid);
+
+      let html = `
+        <div class="profile-header">
+          <img src="${user.profilePic || ''}" alt="">
+          <h2>${user.username}</h2>
+          <p>${user.bio || ''}</p>
+          <div class="profile-stats">
+            <div class="stat"><strong>${postsCount}</strong>منشورات</div>
+            <div class="stat" id="followersStat"><strong>${followersCount}</strong>متابعون</div>
+            <div class="stat" id="followingStat"><strong>${followingCount}</strong>يتابع</div>
+          </div>
+          ${!isOwn ? `<button class="follow-btn ${following ? 'following' : ''}" id="followBtn">${following ? 'إلغاء المتابعة' : 'متابعة'}</button>
+                     <button id="messageBtn" style="margin-top:5px; background:#6e40c9; color:white; border:none; padding:8px 25px; border-radius:20px;">💬 مراسلة</button>` : ''}
+        </div>
+        <div id="userPosts"></div>
+      `;
+      mainContent.innerHTML = html;
+
+      // أزرار المتابعة والمراسلة
+      if (!isOwn) {
+        document.getElementById('followBtn').onclick = async () => {
+          await followUser(uuid);
+          await renderProfile(uuid); // تحديث
+        };
+        document.getElementById('messageBtn').onclick = () => startChatWith(uuid);
+      }
+
+      // عرض المنشورات
+      const posts = await db.posts.where('authorUuid').equals(uuid).reverse().sortBy('timestamp');
+      const postsDiv = document.getElementById('userPosts');
+      for (let post of posts) {
+        const el = await createPostElement(post);
+        postsDiv.appendChild(el);
+      }
+
+      // إحصائيات المتابعين
+      document.getElementById('followersStat').onclick = () => showFollowList('followers', uuid);
+      document.getElementById('followingStat').onclick = () => showFollowList('following', uuid);
+    }
+
+    async function showFollowList(type, uuid) {
+      let list;
+      if (type === 'followers') list = await db.follows.where('followingUuid').equals(uuid).toArray();
+      else list = await db.follows.where('followerUuid').equals(uuid).toArray();
+      const users = [];
+      for (let f of list) {
+        const u = await db.accounts.get(type === 'followers' ? f.followerUuid : f.followingUuid);
+        if (u) users.push(u);
+      }
+      mainContent.innerHTML = `<div class="user-list"><h3>${type === 'followers' ? 'المتابعون' : 'المتابَعون'}</h3></div>`;
+      const container = mainContent.querySelector('.user-list');
+      for (let u of users) {
+        const item = document.createElement('div'); item.className = 'user-item';
+        item.innerHTML = `<img src="${u.profilePic || ''}" alt=""><div class="info"><strong>${u.username}</strong></div><button>عرض</button>`;
+        item.querySelector('button').onclick = () => viewProfile(u.uuid);
+        container.appendChild(item);
+      }
+    }
+
+    // ---------- المحادثات (متعددة) ----------
+    function startChatWith(uuid) {
+      // نضيف اتصالاً جديداً ونفتح المحادثة
+      connectToPeer(uuid);
+      activeChatPeerId = uuid;
+      showBackButton(true);
+      renderChat(uuid);
+    }
+
+    async function connectToPeer(peerId) {
+      if (peerConnections[peerId]) return; // متصل بالفعل
+      const conn = peer.connect(peerId, { reliable: true });
+      conn.on('open', async () => {
+        peerConnections[peerId] = conn;
+        setupConnection(conn, peerId);
+        // إرسال مفتاح AES
+        const key = await generateAESKey();
+        conn.send({ type: 'aes-key', key: await exportKey(key) });
+        // حفظ المفتاح محلياً للجلسة
+        conn._aesKey = key;
+      });
+      conn.on('error', () => alert('فشل الاتصال'));
+    }
+
+    function setupConnection(conn, peerId) {
+      conn.on('data', async (data) => {
+        if (data.type === 'aes-key') {
+          conn._aesKey = await importKey(data.key);
+        } else if (data.type === 'encrypted-message') {
+          const text = await decryptData(conn._aesKey, data.payload);
+          if (activeChatPeerId === peerId) displayMessageInChat(text, 'received');
+          saveMessageToDB(peerId, text, 'received');
+        } else if (data.type === 'encrypted-media') {
+          const url = await decryptData(conn._aesKey, data.payload);
+          if (activeChatPeerId === peerId) displayMessageInChat('', 'received', url, data.mediaType);
+          saveMessageToDB(peerId, '', 'received', url, data.mediaType);
+        }
+      });
+    }
+
+    async function renderChat(peerId) {
+      activeChatPeerId = peerId;
+      mainContent.innerHTML = `
+        <div class="chat-messages" id="chatMessages"></div>
+        <div style="display:flex;padding:10px;border-top:1px solid #30363d;">
+          <input type="text" id="chatInput" placeholder="اكتب..."><button id="sendBtn">إرسال</button><button id="attachBtn">📎</button>
+        </div>
+      `;
+      document.getElementById('sendBtn').onclick = () => sendMessageInChat(peerId);
+      document.getElementById('attachBtn').onclick = () => attachMediaInChat(peerId);
+      await loadChatMessages(peerId);
+    }
+
+    async function loadChatMessages(peerId) {
+      const msgsDiv = document.getElementById('chatMessages');
+      if (!msgsDiv) return;
+      msgsDiv.innerHTML = '';
+      const chatId = [currentUser.uuid, peerId].sort().join('_');
+      const messages = await db.messages.where('chatId').equals(chatId).sortBy('timestamp');
+      messages.forEach(m => displayMessageInChat(m.text, m.sender === currentUser.uuid ? 'sent' : 'received', m.mediaUrl, m.mediaType));
+    }
+
+    function displayMessageInChat(text, type, mediaUrl, mediaType) {
+      const msgsDiv = document.getElementById('chatMessages');
+      if (!msgsDiv) return;
+      const div = document.createElement('div'); div.className = `msg ${type}`;
+      let html = '';
+      if (mediaUrl) html += mediaType === 'image' ? `<img src="${mediaUrl}">` : `<video src="${mediaUrl}" controls></video>`;
+      if (text) html += text;
+      div.innerHTML = html;
+      msgsDiv.appendChild(div);
+      msgsDiv.scrollTop = msgsDiv.scrollHeight;
+    }
+
+    async function sendMessageInChat(peerId) {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+      const conn = peerConnections[peerId];
+      if (!conn || !conn._aesKey) return;
+      const enc = await encryptData(conn._aesKey, text);
+      conn.send({ type: 'encrypted-message', payload: enc });
+      displayMessageInChat(text, 'sent');
+      await saveMessageToDB(peerId, text, 'sent');
+      input.value = '';
+    }
+
+    async function attachMediaInChat(peerId) {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,video/*';
+      inp.onchange = async (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const dataUrl = reader.result;
+          const mediaType = file.type.startsWith('image') ? 'image' : 'video';
+          const conn = peerConnections[peerId];
+          if (conn && conn._aesKey) {
+            const enc = await encryptData(conn._aesKey, dataUrl);
+            conn.send({ type: 'encrypted-media', payload: enc, mediaType });
+            displayMessageInChat('', 'sent', dataUrl, mediaType);
+            await saveMessageToDB(peerId, '', 'sent', dataUrl, mediaType);
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+      inp.click();
+    }
+
+    async function saveMessageToDB(peerId, text, type, mediaUrl, mediaType) {
+      const chatId = [currentUser.uuid, peerId].sort().join('_');
+      await db.messages.add({ chatId, sender: currentUser.uuid, receiver: peerId, text, mediaUrl, mediaType, timestamp: Date.now() });
+    }
+
+    // قائمة المحادثات
+    async function renderChatList() {
+      const chatList = document.createElement('div'); chatList.className = 'chat-list';
+      // استخراج جميع المحادثات الفريدة من جدول messages
+      const allMessages = await db.messages.toArray();
+      const peerIds = [...new Set(allMessages.map(m => m.sender === currentUser.uuid ? m.receiver : m.sender))];
+      for (let peerId of peerIds) {
+        const user = await db.accounts.get(peerId) || { username: 'مستخدم', profilePic: '' };
+        const item = document.createElement('div'); item.className = 'chat-list-item';
+        item.innerHTML = `<img src="${user.profilePic || ''}" alt=""><div><strong>${user.username}</strong></div>`;
+        item.onclick = () => startChatWith(peerId);
+        chatList.appendChild(item);
+      }
+      mainContent.innerHTML = '';
+      mainContent.appendChild(chatList);
+      if (peerIds.length === 0) mainContent.innerHTML += '<p style="text-align:center;color:#8b949e;">لا توجد محادثات. ابحث عن أصدقاء وابدأ مراسلة.</p>';
+    }
+
+    // ---------- استقبال اتصالات PeerJS ----------
+    const peer = new Peer({
+      host: '0.peerjs.com', port: 443, secure: true,
+      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
+    peer.on('connection', (conn) => {
+      const peerId = conn.peer;
+      peerConnections[peerId] = conn;
+      setupConnection(conn, peerId);
+    });
+
+    // ---------- نشر منشور ----------
+    document.getElementById('publishPostBtn').onclick = async () => {
+      const file = document.getElementById('postMediaInput').files[0];
+      if (!file) return alert('اختر ملفاً');
+      const caption = document.getElementById('postCaptionInput').value;
+      const isReel = document.getElementById('postIsReel').checked;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const post = {
+          id: crypto.randomUUID(), authorUuid: currentUser.uuid, authorUsername: currentUser.username,
+          caption, mediaUrl: reader.result, mediaType: file.type.startsWith('image') ? 'image' : 'video',
+          timestamp: Date.now(), isReel
+        };
+        await db.posts.put(post);
+        renderTab('home');
+      };
+      reader.readAsDataURL(file);
+    };
+
+    // ---------- المصادقة ----------
+    document.getElementById('showRegister').onclick = () => {
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('registerForm').style.display = 'block';
+    };
+    document.getElementById('showLogin').onclick = () => {
+      document.getElementById('registerForm').style.display = 'none';
+      document.getElementById('loginForm').style.display = 'block';
+    };
+    document.getElementById('loginBtn').onclick = async () => {
+      const u = document.getElementById('loginUsername').value.trim();
+      const p = document.getElementById('loginPassword').value;
+      document.getElementById('loginError').textContent = '';
+      try {
+        const user = (await db.accounts.toArray()).find(a => a.username === u);
+        if (!user) throw new Error('المستخدم غير موجود');
+        const hash = await hashPassword(p);
+        if (user.passwordHash !== hash) throw new Error('كلمة مرور خاطئة');
+        currentUser = user;
+        await saveSession(user.uuid);
+        document.getElementById('authScreen').classList.remove('active');
+        document.getElementById('mainScreen').classList.add('active');
+        switchTab('home');
+      } catch(e) { document.getElementById('loginError').textContent = e.message; }
+    };
+    document.getElementById('adminLoginBtn').onclick = () => {
+      document.getElementById('loginUsername').value = 'YamanGadhat';
+      document.getElementById('loginPassword').value = 'Yaman@2008';
+      document.getElementById('loginBtn').click();
+    };
+    document.getElementById('registerBtn').onclick = async () => {
+      const u = document.getElementById('regUsername').value.trim();
+      const p = document.getElementById('regPassword').value;
+      document.getElementById('regError').textContent = '';
+      if (u.length < 3 || p.length < 6) { document.getElementById('regError').textContent = 'الاسم 3 أحرف وكلمة المرور 6 على الأقل'; return; }
+      const exists = (await db.accounts.toArray()).some(a => a.username === u);
+      if (exists) { document.getElementById('regError').textContent = 'اسم المستخدم موجود'; return; }
+      const hash = await hashPassword(p);
+      const newUser = { uuid: crypto.randomUUID(), username: u, passwordHash: hash, profilePic: '', bio: '' };
+      await db.accounts.put(newUser);
+      currentUser = newUser;
+      await saveSession(newUser.uuid);
+      document.getElementById('authScreen').classList.remove('active');
+      document.getElementById('mainScreen').classList.add('active');
+      switchTab('home');
+    };
+
+    // ==================== بدء التطبيق ====================
+    (async () => {
+      await initAdmin();
+      const savedUUID = await loadSession();
+      if (savedUUID) {
+        const user = await db.accounts.get(savedUUID);
+        if (user) {
+          currentUser = user;
+          document.getElementById('authScreen').classList.remove('active');
+          document.getElementById('mainScreen').classList.add('active');
+          switchTab('home');
+        }
+      }
+    })();
+  })();
+</script>
+</body>
+</html>
